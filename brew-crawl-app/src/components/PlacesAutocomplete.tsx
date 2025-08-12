@@ -16,15 +16,16 @@ export interface PlacesAutocompleteRef {
 const PlacesAutocomplete = forwardRef<PlacesAutocompleteRef, PlacesAutocompleteProps>(
   ({ placeholder = "Enter city, address, or zip code", disabled = false, onPlaceSelect }, ref) => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
     const callbackRef = useRef<((place: { lat: number; lng: number; address: string }) => void) | null>(null);
 
+    // Set the callback
     useImperativeHandle(ref, () => ({
       onPlaceSelect: (callback: (place: { lat: number; lng: number; address: string }) => void) => {
         callbackRef.current = callback;
       }
     }));
 
+    // Also support direct prop callback
     useEffect(() => {
       if (onPlaceSelect) {
         callbackRef.current = onPlaceSelect;
@@ -42,12 +43,14 @@ const PlacesAutocomplete = forwardRef<PlacesAutocompleteRef, PlacesAutocompleteP
               fields: ['place_id', 'formatted_address', 'geometry', 'name'],
             });
 
+            // Prevent form submission on Enter key
             inputRef.current.addEventListener('keydown', (e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
               }
             });
 
+            // Listen for place selection
             autocompleteInstance.addListener('place_changed', () => {
               const place = autocompleteInstance.getPlace();
               console.log('Place selected:', place);
@@ -64,7 +67,6 @@ const PlacesAutocomplete = forwardRef<PlacesAutocompleteRef, PlacesAutocompleteP
               }
             });
 
-            setAutocomplete(autocompleteInstance);
             console.log('Autocomplete initialized');
           }
         } catch (error) {

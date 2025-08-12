@@ -27,6 +27,7 @@ export default function Home() {
   const [useCurrentLocation, setUseCurrentLocation] = useState(true);
   const [selectedPlace, setSelectedPlace] = useState<{lat: number; lng: number; address: string} | null>(null);
 
+  // Get user's current location
   const getCurrentLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -49,6 +50,7 @@ export default function Home() {
     }
   };
 
+  // Handle place selection from autocomplete
   const handlePlaceSelect = (place: {lat: number; lng: number; address: string}) => {
     console.log('handlePlaceSelect called with:', place);
     setLocation({ lat: place.lat, lng: place.lng });
@@ -56,6 +58,7 @@ export default function Home() {
     setUseCurrentLocation(false);
   };
 
+  // Search for breweries
   const searchBreweries = async () => {
     if (!location) return;
 
@@ -76,6 +79,7 @@ export default function Home() {
     }
   };
 
+  // Optimize route
   const optimizeRoute = async () => {
     if (!location || breweries.length === 0) return;
 
@@ -103,36 +107,46 @@ export default function Home() {
     }
   };
 
+  // Export route to Google Maps
   const exportToGoogleMaps = () => {
     if (!location || route.length === 0) return;
 
+    // Create waypoints string for Google Maps URL
     const waypoints = route.map(brewery => 
       `${brewery.latitude},${brewery.longitude}`
     ).join('|');
 
+    // Google Maps URL with directions
     const googleMapsUrl = `https://www.google.com/maps/dir/${location.lat},${location.lng}/${waypoints}`;
     
+    // Open in new tab
     window.open(googleMapsUrl, '_blank');
   };
 
+  // Export route with brewery names (more user-friendly)
   const exportToGoogleMapsWithNames = () => {
     if (!location || route.length === 0) return;
 
+    // Validate coordinates
     if (!validateCoordinates(location.lat, location.lng)) {
       alert('Invalid starting location coordinates');
       return;
     }
 
+    // Create waypoints with brewery names and addresses (sanitized)
     const waypoints = route.map(brewery => {
       const address = `${brewery.name}, ${brewery.address_1 || ''} ${brewery.city}, ${brewery.state_province}`;
       return sanitizeForUrl(address);
     }).join('/');
 
+    // Google Maps URL with named locations
     const googleMapsUrl = `https://www.google.com/maps/dir/Current+Location/${waypoints}`;
     
+    // Open in new tab
     window.open(googleMapsUrl, '_blank');
   };
 
+  // Share route as text
   const shareRoute = () => {
     if (!location || route.length === 0) return;
 
@@ -143,26 +157,30 @@ export default function Home() {
       `\n\n🎯 Total stops: ${route.length}\n📱 Created with Brew Journey`;
 
     if (navigator.share) {
+      // Use native share on mobile
       navigator.share({
         title: 'My Brew Journey Route',
         text: routeText,
       });
     } else {
+      // Copy to clipboard on desktop
       navigator.clipboard.writeText(routeText).then(() => {
         alert('Route copied to clipboard! 📋');
       });
     }
   };
 
+  // Auto-get location on mount
   useEffect(() => {
     getCurrentLocation();
   }, []);
 
+  // Search breweries when location or radius changes
   useEffect(() => {
     if (location) {
       searchBreweries();
     }
-  }, [location, searchRadius]);
+  }, [location, searchRadius]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!location) {
     return (
@@ -170,8 +188,8 @@ export default function Home() {
         <div className="text-center bg-white p-8 rounded-xl shadow-xl max-w-md w-full mx-4 border border-orange-100">
           <div className="text-6xl mb-4">🍺</div>
           <h1 className="text-4xl font-bold mb-6 text-amber-900">Brew Journey</h1>
-          <p className="text-amber-700 mb-6">Craft your brewery adventure</p>
-
+          <p className="text-amber-700 mb-6">Plan your perfect brewery adventure</p>
+          
           <div className="space-y-4">
             <p className="text-amber-800 font-medium">Choose your starting point:</p>
             
@@ -184,7 +202,7 @@ export default function Home() {
             
             <div className="text-amber-600">or</div>
             
-            <div className="space-y-3 text-orange-800">
+            <div className="space-y-3">
               <PlacesAutocomplete 
                 placeholder="Search for a city, address, or place"
                 disabled={loading}
@@ -400,6 +418,7 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Route Summary */}
               {route.length > 0 && (
                 <div className="mt-6 p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
                   <h3 className="font-semibold text-amber-900 mb-3 flex items-center gap-2">
@@ -407,6 +426,7 @@ export default function Home() {
                     Your Brew Journey Route
                   </h3>
                   
+                  {/* Export Button */}
                   <div className="mb-4">
                     <button
                       onClick={exportToGoogleMapsWithNames}
@@ -439,6 +459,7 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Map */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-xl p-6 border border-orange-100">
               <div className="h-96 lg:h-[600px]">
