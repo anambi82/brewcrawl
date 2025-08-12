@@ -12,7 +12,9 @@ export const getGoogleMapsLoader = (): Promise<typeof google> => {
     loaderInstance = new Loader({
       apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
       version: 'weekly',
-      libraries: ['places', 'geometry'] 
+      libraries: ['places', 'geometry'], 
+      language: 'en',
+      region: 'US'
     });
   }
 

@@ -35,8 +35,8 @@ const PlacesAutocomplete = forwardRef<PlacesAutocompleteRef, PlacesAutocompleteP
         try {
           await getGoogleMapsLoader();
           
-          if (inputRef.current) {
-            const autocompleteInstance = new google.maps.places.Autocomplete(inputRef.current, {
+          if (inputRef.current && window.google) {
+            const autocompleteInstance = new window.google.maps.places.Autocomplete(inputRef.current, {
               types: ['establishment', 'geocode'],
               fields: ['place_id', 'formatted_address', 'geometry', 'name'],
             });
