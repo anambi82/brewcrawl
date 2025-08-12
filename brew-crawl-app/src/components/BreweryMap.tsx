@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getGoogleMapsLoader } from '@/utils/googleMapsLoader';
+import { escapeHtml } from '@/utils/security';
 
-// Type declaration for Google Maps (if @types/google.maps doesn't work)
 declare global {
   interface Window {
     google: typeof google;
@@ -66,6 +66,7 @@ declare namespace google {
       title?: string;
       icon?: string | Icon;
       label?: string | MarkerLabel;
+      zIndex?: number;
     }
     interface InfoWindowOptions {
       content?: string;
@@ -73,6 +74,11 @@ declare namespace google {
     interface DirectionsRendererOptions {
       suppressMarkers?: boolean;
       draggable?: boolean;
+      polylineOptions?: {
+        strokeColor?: string;
+        strokeWeight?: number;
+        strokeOpacity?: number;
+      };
     }
     interface DirectionsRequest {
       origin: LatLngLiteral;
@@ -160,10 +166,14 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
           
           setMap(mapInstance);
           
-          // Initialize directions renderer
           const renderer = new google.maps.DirectionsRenderer({
-            suppressMarkers: false,
+            suppressMarkers: true, 
             draggable: false,
+            polylineOptions: {
+              strokeColor: '#fb923c', // route line color
+              strokeWeight: 4,
+              strokeOpacity: 0.8
+            }
           });
           renderer.setMap(mapInstance);
           setDirectionsRenderer(renderer);
@@ -176,43 +186,56 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
     initializeMap();
   }, [center]);
 
-  // Update brewery markers
   useEffect(() => {
     if (!map) return;
 
-    // Clear existing markers
     markers.forEach(marker => marker.setMap(null));
     
     const newMarkers: google.maps.Marker[] = [];
 
-    // Add brewery markers
     breweries.forEach((brewery, index) => {
       const isInRoute = route?.some(r => r.id === brewery.id);
+      const routeIndex = route?.findIndex(r => r.id === brewery.id) ?? -1;
+      
+      let markerIcon;
+      let markerLabel;
+      
+      if (isInRoute && routeIndex !== -1) {
+        markerIcon = {
+          url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+          scaledSize: new google.maps.Size(32, 32)
+        };
+        markerLabel = {
+          text: (routeIndex + 1).toString(),
+          color: 'white',
+          fontWeight: 'bold',
+          fontSize: '14px'
+        };
+      } else {
+        markerIcon = {
+          url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+          scaledSize: new google.maps.Size(24, 24)
+        };
+        markerLabel = undefined;
+      }
       
       const marker = new google.maps.Marker({
         position: { lat: brewery.latitude, lng: brewery.longitude },
         map,
         title: brewery.name,
-        icon: {
-          url: isInRoute ? 
-            'https://maps.google.com/mapfiles/ms/icons/red-dot.png' : 
-            'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-          scaledSize: new google.maps.Size(32, 32)
-        },
-        label: isInRoute ? {
-          text: (route!.findIndex(r => r.id === brewery.id) + 1).toString(),
-          color: 'white',
-          fontWeight: 'bold'
-        } : undefined
+        icon: markerIcon,
+        label: markerLabel,
+        zIndex: isInRoute ? 1000 : 100 
       });
 
       const infoWindow = new google.maps.InfoWindow({
         content: `
-          <div class="p-2">
-            <h3 class="font-bold text-lg">${brewery.name}</h3>
-            <p class="text-sm text-gray-600">${brewery.address_1 || ''}</p>
-            <p class="text-sm text-gray-600">${brewery.city}, ${brewery.state_province}</p>
-            ${brewery.distance ? `<p class="text-sm text-blue-600">${brewery.distance.toFixed(1)} miles away</p>` : ''}
+          <div style="padding: 12px; max-width: 250px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold; color: #000000 !important;">${escapeHtml(brewery.name)}</h3>
+            ${brewery.address_1 ? `<p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">${escapeHtml(brewery.address_1)}</p>` : ''}
+            <p style="margin: 0 0 8px 0; font-size: 12px; color: #6b7280;">${escapeHtml(brewery.city)}, ${escapeHtml(brewery.state_province)}</p>
+            ${brewery.distance ? `<p style="margin: 0 0 8px 0; font-size: 12px; color: #2563eb; font-weight: 500;">📍 ${brewery.distance.toFixed(1)} miles away</p>` : ''}
+            ${isInRoute && routeIndex !== -1 ? `<div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 6px 8px; margin-top: 8px;"><p style="margin: 0; font-size: 12px; color: #92400e; font-weight: 600;">Stop #${routeIndex + 1} on your route</p></div>` : ''}
           </div>
         `
       });
@@ -227,7 +250,6 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
       newMarkers.push(marker);
     });
 
-    // Add starting point marker
     const startMarker = new google.maps.Marker({
       position: center,
       map,
@@ -248,13 +270,16 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
     setMarkers(newMarkers);
   }, [map, breweries, route, center, onBreweryClick]);
 
-  // Draw route
   useEffect(() => {
-    if (!map || !directionsRenderer || !route || route.length === 0) return;
+    if (!map || !directionsRenderer || !route || route.length === 0) {
+      if (directionsRenderer) {
+        directionsRenderer.setDirections({routes: []});
+      }
+      return;
+    }
 
     const directionsService = new google.maps.DirectionsService();
 
-    // Create waypoints from route
     const waypoints = route.slice(0, -1).map(brewery => ({
       location: { lat: brewery.latitude, lng: brewery.longitude },
       stopover: true
@@ -266,7 +291,7 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
       origin: center,
       destination: { lat: destination.latitude, lng: destination.longitude },
       waypoints,
-      optimizeWaypoints: false, // We've already optimized
+      optimizeWaypoints: false,
       travelMode: google.maps.TravelMode.DRIVING,
     }, (response, status) => {
       if (status === 'OK' && response) {
