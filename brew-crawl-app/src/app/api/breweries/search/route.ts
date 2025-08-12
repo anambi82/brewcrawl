@@ -19,7 +19,6 @@ export interface Brewery {
   street?: string;
 }
 
-// Haversine formula to calculate distance between two points
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3959; // Radius of Earth in miles
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -47,7 +46,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Search breweries by distance from Open Brewery DB
     const response = await fetch(
       `https://api.openbrewerydb.org/v1/breweries?per_page=100&by_dist=${latitude},${longitude}`
     );
@@ -58,9 +56,8 @@ export async function GET(request: NextRequest) {
 
     const breweries: Brewery[] = await response.json();
 
-    // Filter breweries within radius and add distance
     const nearbyBreweries = breweries
-      .filter(brewery => brewery.latitude && brewery.longitude) // Already numbers, no need to parse
+      .filter(brewery => brewery.latitude && brewery.longitude)
       .map(brewery => {
         const distance = calculateDistance(
           latitude,

@@ -1,8 +1,3 @@
-// Security utilities for input sanitization
-
-/**
- * Escapes HTML characters to prevent XSS attacks
- */
 export function escapeHtml(unsafe: string): string {
   if (!unsafe || typeof unsafe !== 'string') return '';
   
@@ -15,22 +10,25 @@ export function escapeHtml(unsafe: string): string {
     .replace(/\//g, "&#x2F;");
 }
 
-/**
- * Sanitizes text for use in URLs
- */
 export function sanitizeForUrl(input: string): string {
   if (!input || typeof input !== 'string') return '';
   
-  // Remove potentially dangerous characters and encode
   const cleaned = input.replace(/[<>\"'&]/g, '');
   return encodeURIComponent(cleaned);
 }
 
-/**
- * Validates and sanitizes numeric inputs
- */
-export function sanitizeNumeric(input: string | number, min?: number, max?: number): number {
-  const num = typeof input === 'string' ? parseFloat(input) : input;
+export function sanitizeNumeric(input: string | number | unknown, min?: number, max?: number): number {
+  let num: number;
+  
+  if (typeof input === 'number') {
+    num = input;
+  } else if (typeof input === 'string') {
+    num = parseFloat(input);
+  } else if (input != null) {
+    num = parseFloat(String(input));
+  } else {
+    throw new Error('Input is null or undefined');
+  }
   
   if (isNaN(num) || !isFinite(num)) {
     throw new Error('Invalid numeric input');
@@ -47,9 +45,7 @@ export function sanitizeNumeric(input: string | number, min?: number, max?: numb
   return num;
 }
 
-/**
- * Validates latitude/longitude coordinates
- */
+
 export function validateCoordinates(lat: number, lng: number): boolean {
   return (
     typeof lat === 'number' && 
@@ -60,10 +56,27 @@ export function validateCoordinates(lat: number, lng: number): boolean {
   );
 }
 
-/**
- * Sanitizes brewery data from API
- */
-export function sanitizeBreweryData(brewery: any) {
+interface RawBreweryData {
+  id?: unknown;
+  name?: unknown;
+  brewery_type?: unknown;
+  address_1?: unknown;
+  address_2?: unknown;
+  address_3?: unknown;
+  city?: unknown;
+  state_province?: unknown;
+  state?: unknown;
+  postal_code?: unknown;
+  country?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
+  phone?: unknown;
+  website_url?: unknown;
+  street?: unknown;
+}
+
+
+export function sanitizeBreweryData(brewery: RawBreweryData) {
   return {
     id: escapeHtml(String(brewery.id || '')),
     name: escapeHtml(String(brewery.name || 'Unknown Brewery')),

@@ -1,125 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { getGoogleMapsLoader } from '@/utils/googleMapsLoader';
 import { escapeHtml } from '@/utils/security';
-
-// Type declaration for Google Maps (if @types/google.maps doesn't work)
-declare global {
-  interface Window {
-    google: typeof google;
-  }
-}
-
-declare namespace google {
-  namespace maps {
-    class Map {
-      constructor(mapDiv: Element, opts?: MapOptions);
-    }
-    class Marker {
-      constructor(opts?: MarkerOptions);
-      addListener(eventName: string, handler: Function): void;
-      setMap(map: Map | null): void;
-    }
-    class InfoWindow {
-      constructor(opts?: InfoWindowOptions);
-      open(map: Map, anchor?: Marker): void;
-    }
-    class DirectionsService {
-      route(request: DirectionsRequest, callback: (response: DirectionsResult | null, status: DirectionsStatus) => void): void;
-    }
-    class DirectionsRenderer {
-      constructor(opts?: DirectionsRendererOptions);
-      setMap(map: Map): void;
-      setDirections(directions: DirectionsResult): void;
-    }
-    namespace places {
-      class Autocomplete {
-        constructor(inputField: HTMLInputElement, opts?: AutocompleteOptions);
-        addListener(eventName: string, handler: Function): void;
-        getPlace(): PlaceResult;
-      }
-      interface AutocompleteOptions {
-        types?: string[];
-        fields?: string[];
-      }
-      interface PlaceResult {
-        place_id?: string;
-        formatted_address?: string;
-        name?: string;
-        geometry?: {
-          location?: {
-            lat(): number;
-            lng(): number;
-          };
-        };
-      }
-    }
-    interface MapOptions {
-      center?: LatLngLiteral;
-      zoom?: number;
-      mapTypeId?: MapTypeId;
-      styles?: MapTypeStyle[];
-    }
-    interface MarkerOptions {
-      position?: LatLngLiteral;
-      map?: Map;
-      title?: string;
-      icon?: string | Icon;
-      label?: string | MarkerLabel;
-      zIndex?: number;
-    }
-    interface InfoWindowOptions {
-      content?: string;
-    }
-    interface DirectionsRendererOptions {
-      suppressMarkers?: boolean;
-      draggable?: boolean;
-      polylineOptions?: {
-        strokeColor?: string;
-        strokeWeight?: number;
-        strokeOpacity?: number;
-      };
-    }
-    interface DirectionsRequest {
-      origin: LatLngLiteral;
-      destination: LatLngLiteral;
-      waypoints?: DirectionsWaypoint[];
-      optimizeWaypoints?: boolean;
-      travelMode: TravelMode;
-    }
-    interface DirectionsWaypoint {
-      location: LatLngLiteral;
-      stopover: boolean;
-    }
-    interface LatLngLiteral {
-      lat: number;
-      lng: number;
-    }
-    interface Icon {
-      url: string;
-      scaledSize: Size;
-    }
-    interface MarkerLabel {
-      text: string;
-      color: string;
-      fontWeight: string;
-      fontSize?: string;
-    }
-    enum MapTypeId {
-      ROADMAP = 'roadmap'
-    }
-    enum TravelMode {
-      DRIVING = 'DRIVING'
-    }
-    type DirectionsStatus = string;
-    type DirectionsResult = any;
-    type MapTypeStyle = any;
-    class Size {
-      constructor(width: number, height: number);
-    }
-  }
-}
 
 interface Brewery {
   id: string;
@@ -139,11 +22,44 @@ interface BreweryMapProps {
   onBreweryClick?: (brewery: Brewery) => void;
 }
 
+interface GoogleMapsAPI {
+  maps: {
+    Map: new (element: Element, options: Record<string, unknown>) => object;
+    Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
+    InfoWindow: new (options: Record<string, unknown>) => GoogleInfoWindowInstance;
+    DirectionsService: new () => GoogleDirectionsServiceInstance;
+    DirectionsRenderer: new (options: Record<string, unknown>) => GoogleDirectionsRendererInstance;
+    Size: new (width: number, height: number) => object;
+    MapTypeId: { ROADMAP: string };
+    TravelMode: { DRIVING: string };
+  };
+}
+
+interface GoogleMarkerInstance {
+  setMap: (map: object | null) => void;
+  addListener: (event: string, callback: () => void) => void;
+}
+
+interface GoogleInfoWindowInstance {
+  open: (map: object, marker: GoogleMarkerInstance) => void;
+}
+
+interface GoogleDirectionsServiceInstance {
+  route: (request: Record<string, unknown>, callback: (response: unknown, status: string) => void) => void;
+}
+
+interface GoogleDirectionsRendererInstance {
+  setMap: (map: object) => void;
+  setDirections: (directions: Record<string, unknown>) => void;
+}
+
+declare const google: GoogleMapsAPI;
+
 export default function BreweryMap({ breweries, route, center, onBreweryClick }: BreweryMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const [map, setMap] = useState<google.maps.Map | null>(null);
-  const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
-  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const [map, setMap] = useState<object | null>(null);
+  const [markers, setMarkers] = useState<GoogleMarkerInstance[]>([]);
+  const [directionsRenderer, setDirectionsRenderer] = useState<GoogleDirectionsRendererInstance | null>(null);
 
   // Initialize Google Maps
   useEffect(() => {
@@ -153,7 +69,7 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
         
         if (mapRef.current) {
           const mapInstance = new google.maps.Map(mapRef.current, {
-            center,
+            center: center,
             zoom: 12,
             mapTypeId: google.maps.MapTypeId.ROADMAP,
             styles: [
@@ -167,12 +83,11 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
           
           setMap(mapInstance);
           
-          // Initialize directions renderer with suppressed markers
           const renderer = new google.maps.DirectionsRenderer({
-            suppressMarkers: true, // This prevents duplicate markers
+            suppressMarkers: true,
             draggable: false,
             polylineOptions: {
-              strokeColor: '#fb923c', // Orange route line
+              strokeColor: '#fb923c',
               strokeWeight: 4,
               strokeOpacity: 0.8
             }
@@ -188,26 +103,21 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
     initializeMap();
   }, [center]);
 
-  // Update brewery markers
-  useEffect(() => {
+  const updateMarkers = useCallback(() => {
     if (!map) return;
 
-    // Clear existing markers
-    markers.forEach(marker => marker.setMap(null));
+    markers.forEach((marker: GoogleMarkerInstance) => marker.setMap(null));
     
-    const newMarkers: google.maps.Marker[] = [];
+    const newMarkers: GoogleMarkerInstance[] = [];
 
-    // Add brewery markers
-    breweries.forEach((brewery) => {
-      const isInRoute = route?.some(r => r.id === brewery.id);
-      const routeIndex = route?.findIndex(r => r.id === brewery.id) ?? -1;
+    breweries.forEach((brewery: Brewery) => {
+      const isInRoute = route?.some((r: Brewery) => r.id === brewery.id);
+      const routeIndex = route?.findIndex((r: Brewery) => r.id === brewery.id) ?? -1;
       
-      // Choose marker style based on route status
-      let markerIcon;
-      let markerLabel;
+      let markerIcon: Record<string, unknown>;
+      let markerLabel: Record<string, unknown> | undefined;
       
       if (isInRoute && routeIndex !== -1) {
-        // Brewery is in the planned route - use numbered red markers
         markerIcon = {
           url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
           scaledSize: new google.maps.Size(32, 32)
@@ -219,7 +129,6 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
           fontSize: '14px'
         };
       } else {
-        // Brewery not in route - use smaller blue markers
         markerIcon = {
           url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
           scaledSize: new google.maps.Size(24, 24)
@@ -229,11 +138,11 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
       
       const marker = new google.maps.Marker({
         position: { lat: brewery.latitude, lng: brewery.longitude },
-        map,
+        map: map,
         title: brewery.name,
         icon: markerIcon,
         label: markerLabel,
-        zIndex: isInRoute ? 1000 : 100 // Route markers appear on top
+        zIndex: isInRoute ? 1000 : 100
       });
 
       const infoWindow = new google.maps.InfoWindow({
@@ -258,10 +167,9 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
       newMarkers.push(marker);
     });
 
-    // Add starting point marker
     const startMarker = new google.maps.Marker({
       position: center,
-      map,
+      map: map,
       title: 'Starting Point',
       icon: {
         url: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
@@ -277,12 +185,14 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
 
     newMarkers.push(startMarker);
     setMarkers(newMarkers);
-  }, [map, breweries, route, center, onBreweryClick]);
+  }, [map, breweries, route, center, onBreweryClick]); 
 
-  // Draw route
+  useEffect(() => {
+    updateMarkers();
+  }, [updateMarkers]);
+
   useEffect(() => {
     if (!map || !directionsRenderer || !route || route.length === 0) {
-      // Clear any existing route when no route is provided
       if (directionsRenderer) {
         directionsRenderer.setDirections({routes: []});
       }
@@ -291,8 +201,7 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
 
     const directionsService = new google.maps.DirectionsService();
 
-    // Create waypoints from route
-    const waypoints = route.slice(0, -1).map(brewery => ({
+    const waypoints = route.slice(0, -1).map((brewery: Brewery) => ({
       location: { lat: brewery.latitude, lng: brewery.longitude },
       stopover: true
     }));
@@ -302,12 +211,12 @@ export default function BreweryMap({ breweries, route, center, onBreweryClick }:
     directionsService.route({
       origin: center,
       destination: { lat: destination.latitude, lng: destination.longitude },
-      waypoints,
-      optimizeWaypoints: false, // We've already optimized
+      waypoints: waypoints,
+      optimizeWaypoints: false,
       travelMode: google.maps.TravelMode.DRIVING,
-    }, (response, status) => {
+    }, (response: unknown, status: string) => {
       if (status === 'OK' && response) {
-        directionsRenderer.setDirections(response);
+        directionsRenderer.setDirections(response as Record<string, unknown>);
       } else {
         console.error('Directions request failed:', status);
       }
